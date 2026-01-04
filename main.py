@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 
 # 1. Page Configuration
-st.set_page_config(page_title="SADANI OVERSEAS - Quality Dashboard", layout="wide")
+st.set_page_config(page_title="SADANI OVERSEAS - Dashboard", layout="wide")
 
 # --- HEADER SECTION ---
 st.markdown("""
@@ -20,13 +20,13 @@ st.markdown("""
     <hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>
     """, unsafe_allow_html=True)
 
-# 2. Data Loading (Live Connection to Google Sheets)
+# 2. Data Loading (Connected to your Google Sheet)
 @st.cache_data(ttl=60) 
 def load_data():
     try:
         sheet_url = "https://docs.google.com/spreadsheets/d/1X15uV-k6UuSlo3D_46O9j1D0H6lR_0D_p9uD9l4qD98/pub?output=csv"
         df = pd.read_csv(sheet_url)
-        # Fix for potential data errors in Sheet
+        # Clean data to avoid the 'Line 65' crash
         df = df.iloc[:, :7]
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY Checked', 'Rejected Qty', 'Rework Qty']
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -35,7 +35,7 @@ def load_data():
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
     except Exception as e:
-        st.error(f"Waiting for data: {e}")
+        st.error(f"Waiting for live data... {e}")
         return None
 
 df = load_data()
@@ -50,7 +50,7 @@ if df is not None:
     df_selection = df[(df['Checker Name'].isin(checker_f)) & (df['Polisher Name'].isin(polisher_f))].copy()
 
     if not df_selection.empty:
-        # 4. KPI Metrics (Your Real Data: 384,546 production)
+        # 4. KPI Metrics (Your data: 384,546 production)
         total_prod = df_selection['QTY Checked'].sum()
         total_rej = df_selection['Rejected Qty'].sum()
         total_rew = df_selection['Rework Qty'].sum()
@@ -62,36 +62,36 @@ if df is not None:
         m3.metric("Total Rework", f"{int(total_rew):,}")
         m4.metric("Avg Rejection %", f"{avg_rej:.2f}%")
 
-        # 5. Daily Rejection Trend Chart
+        # 5. Trend Chart
         st.markdown("---")
-        st.subheader("📈 Quality Trend")
+        st.subheader("📈 Quality Trend Line")
         trend_data = df_selection.groupby(df_selection['Date'].dt.date).agg({'QTY Checked':'sum', 'Rejected Qty':'sum'}).reset_index()
         trend_data['Rej%'] = (trend_data['Rejected Qty'] / trend_data['QTY Checked'] * 100).round(2)
-        fig = px.line(trend_data, x='Date', y='Rej%', title="Rejection Trend", markers=True, color_discrete_sequence=['#1B5E20'])
+        fig = px.line(trend_data, x='Date', y='Rej%', title="Daily Rejection Trend", markers=True, color_discrete_sequence=['#1B5E20'])
         st.plotly_chart(fig, use_container_width=True)
 
-        # 6. Quality Table with Green/Red Color Logic
+        # 6. Data Table with Red/Green Colors
         st.markdown("---")
-        st.subheader("📑 Detailed Quality Table")
+        st.subheader("📑 Detailed Data Table")
         df_selection['Rej%'] = (df_selection['Rejected Qty'] / df_selection['QTY Checked'] * 100).round(2)
         
-        def color_table(val):
-            # Green if Rejection is low, Red if high
+        def color_logic(val):
+            # Green for good quality, Red for high rejection
             color = '#C8E6C9' if val < 2 else '#FFCDD2'
             return f'background-color: {color}; font-weight: bold'
 
-        st.dataframe(df_selection.style.applymap(color_table, subset=['Rej%']), use_container_width=True)
+        st.dataframe(df_selection.style.applymap(color_logic, subset=['Rej%']), use_container_width=True)
 
-        # 7. DOWNLOAD BUTTON (No more Red Error Box)
-        csv_data = df_selection.to_csv(index=False).encode('utf-8')
+        # 7. Download Button (FIX: Using CSV to stop the Red Error Box)
+        csv = df_selection.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Download Quality Report (CSV)",
-            data=csv_data,
-            file_name="Sadani_Overseas_Report.csv",
+            label="📥 Download Data Report (CSV)",
+            data=csv,
+            file_name="Sadani_Quality_Report.csv",
             mime="text/csv"
         )
     else:
-        st.warning("No data found for the current filters.")
+        st.warning("No data found for selected filters.")
 
 # Auto-refresh
 time.sleep(60)
