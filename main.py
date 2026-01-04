@@ -24,30 +24,36 @@ st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsa
 # 2. Data Loading from Google Sheets
 @st.cache_data(ttl=60)
 def load_data():
-    # Corrected CSV Link
+    # Corrected CSV Link (ends with pub?output=csv)
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
     
     try:
-        # Step 1: Read the CSV link (the link you already updated correctly)
+        # Load data and skip bad lines like the Row 65 error
         df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
         
-        # Step 2: Fix the 'Saw 10 fields' error by strictly taking only the first 7 columns
+        # FIX: Force the program to only look at the first 7 columns
         df = df.iloc[:, :7] 
         
-        # Step 3: Rename columns so the charts can find the right data
+        # Rename columns to match your spreadsheet exactly
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
         
-        # Step 4: Remove any empty rows that might be at the bottom of the sheet
-        df = df.dropna(subset=['Date'])
+        # Remove empty rows
+        df = df.dropna(subset=['Date']) 
         
-        # Convert numbers
+        # Clean text and convert dates
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df['Checker'] = df['Checker Name'].astype(str).str.strip()
+        df['Polisher'] = df['Polisher Name'].astype(str).str.strip()
+        df['Part'] = df['Item Name'].astype(str).str.strip()
+        
+        # Convert numbers and handle missing values
         df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
         df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
         df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
         
         return df
     except Exception as e:
-        st.error(f"Waiting for data to clean... {e}")
+        st.error(f"Error loading data: {e}")
         return None
 
 df = load_data()
@@ -62,6 +68,7 @@ if df is not None:
         polisher_f = st.multiselect("Polisher:", options=sorted(df['Polisher'].unique()), default=df['Polisher'].unique())
         part_f = st.multiselect("Part Name:", options=sorted(df['Part'].unique()), default=df['Part'].unique())
 
+    # Apply Filters to the Data
     df_selection = df[
         (df['Date'].dt.date >= start_date) & 
         (df['Date'].dt.date <= end_date) & 
@@ -77,6 +84,7 @@ if df is not None:
         total_rew = df_selection['Rework'].sum()
         avg_rej_percent = (total_rej / total_prod * 100) if total_prod > 0 else 0
 
+        # Display Metrics in 4 columns
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.markdown(f"<div style='text-align:center; background-color:#E8F5E9; padding:15px; border-radius:10px; border-left: 5px solid #2E7D32;'><p style='color:#2E7D32; font-size:16px; margin:0;'>Total Production</p><h2 style='color:#1B5E20; margin:0;'>{int(total_prod):,}</h2></div>", unsafe_allow_html=True)
@@ -87,26 +95,30 @@ if df is not None:
         with m4:
             st.markdown(f"<div style='text-align:center; background-color:#F3E5F5; padding:15px; border-radius:10px; border-left: 5px solid #7B1FA2;'><p style='color:#7B1FA2; font-size:16px; margin:0;'>Avg Rejection %</p><h2 style='color:#4A148C; margin:0;'>{avg_rej_percent:.2f}%</h2></div>", unsafe_allow_html=True)
 
+        # Master Table with Color Logic
         st.markdown("---")
-        st.subheader("📑 Full Master Data Table")
+        st.subheader("📑 Full Quality Data Table")
         df_display = df_selection.copy()
         df_display['Rejection %'] = (df_display['Rejected'] / df_display['Production'] * 100).fillna(0).round(2)
         
-        def style_master_table(val):
-            if val == 0: return 'background-color: #BBDEFB; color: black;' 
-            elif val < 2.0: return 'background-color: #C8E6C9; color: black;' 
-            elif val < 5.0: return 'background-color: #FFF9C4; color: black;' 
-            else: return 'background-color: #FFCDD2; color: #990000;' 
+        # Function to add color based on rejection percentage
+        def style_table(val):
+            if val == 0: return 'background-color: #BBDEFB; color: black;' # Blue (Perfect)
+            elif val < 2.0: return 'background-color: #C8E6C9; color: black;' # Green (Good)
+            elif val < 5.0: return 'background-color: #FFF9C4; color: black;' # Yellow (Warning)
+            else: return 'background-color: #FFCDD2; color: #990000;' # Red (Critical)
 
-        st.dataframe(df_display.style.applymap(style_master_table, subset=['Rejection %']), use_container_width=True)
+        st.dataframe(df_display.style.applymap(style_table, subset=['Rejection %']), use_container_width=True)
 
+        # Excel Download Button
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
             df_display.to_excel(writer, index=False)
-        st.download_button(label="📥 Download Excel Report", data=buf.getvalue(), file_name="Sadani_Quality_Report.xlsx", mime="application/vnd.ms-excel")
+        st.download_button(label="📥 Download Excel Report", data=buf.getvalue(), file_name="Sadani_Overseas_Report.xlsx", mime="application/vnd.ms-excel")
+
     else:
         st.warning("⚠️ No data matches your filters.")
 
-# Refresh page every 60s
+# Auto-refresh every 60 seconds
 time.sleep(60)
 st.rerun()
