@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
-from datetime import datetime
-import time
 
 # 1. Page Configuration
 st.set_page_config(page_title="SADANI OVERSEAS - Quality Dashboard", layout="wide")
@@ -11,103 +9,74 @@ st.set_page_config(page_title="SADANI OVERSEAS - Quality Dashboard", layout="wid
 # --- HEADER SECTION ---
 st.markdown("""
     <div style='text-align: left;'>
-        <h1 style='font-family: "Times New Roman", serif; font-style: italic; color: #1B5E20; font-size: 48px; margin-bottom: 0px;'>
+        <h1 style='font-family: "Times New Roman", serif; font-style: italic; color: #1B5E20; font-size: 48px;'>
             Sadani Overseas
         </h1>
         <p style='color: #4CAF50; font-size: 18px; font-weight: 600; letter-spacing: 1.5px; margin-top: -5px;'>
             DAILY PRODUCTION VS REJECTION DASHBOARD
         </p>
     </div>
-    """, unsafe_allow_html=True)
-st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# 2. Data Loading from Google Sheets
-@st.cache_data(ttl=60)
+# 2. Load Data from Google Sheets
+@st.cache_data(ttl=600)
 def load_data():
-    # This is your correct link with the CSV instruction at the end
-    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
+    sheet_url = "https://docs.google.com/spreadsheets/d/1X15uV-k6UuSlo3D_46O9j1D0H6lR_0D_p9uD9l4qD98/pub?output=csv"
+    df = pd.read_csv(sheet_url)
+    # FIX: Only keep the first 7 columns to ignore the Row 65 error
+    df = df.iloc[:, :7]
+    df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY Checked', 'Rejected Qty', 'Rework Qty']
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    df = df.dropna(subset=['Date'])
     
-    try:
-        # Step A: Load data and skip bad rows like Line 65
-        df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
-        
-        # Step B: STRICTLY take only the first 7 columns to stop the "Saw 10" error
-        df = df.iloc[:, :7] 
-        
-        # Step C: Give columns their correct names
-        df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
-        
-        # Step D: Remove empty rows
-        df = df.dropna(subset=['Date'])
-        
-        # Step E: Clean up numbers and dates
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Checker'] = df['Checker Name'].astype(str).str.strip()
-        df['Polisher'] = df['Polisher Name'].astype(str).str.strip()
-        df['Part'] = df['Item Name'].astype(str).str.strip()
-        
-        df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
-        df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
-        df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
-        
-        return df
-    except Exception as e:
-        st.error(f"Waiting for clean data... {e}")
-        return None
+    # Convert numeric columns safely
+    for col in ['QTY Checked', 'Rejected Qty', 'Rework Qty']:
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    return df
 
-# Load the data
-df = load_data()
+try:
+    df = load_data()
 
-if df is not None:
-    # --- FILTERS ---
-    with st.sidebar:
-        st.header("🔍 Filters")
-        start_date = st.date_input("Start Date", value=df['Date'].min().date())
-        end_date = st.date_input("End Date", value=df['Date'].max().date())
-        checker_f = st.multiselect("Checker:", options=sorted(df['Checker'].unique()), default=df['Checker'].unique())
-        polisher_f = st.multiselect("Polisher:", options=sorted(df['Polisher'].unique()), default=df['Polisher'].unique())
+    # --- SIDEBAR FILTERS ---
+    st.sidebar.header("Filter Options")
+    checker_filter = st.sidebar.multiselect("Select Checker:", options=df['Checker Name'].unique())
+    polisher_filter = st.sidebar.multiselect("Select Polisher:", options=df['Polisher Name'].unique())
 
-    df_selection = df[
-        (df['Date'].dt.date >= start_date) & 
-        (df['Date'].dt.date <= end_date) & 
-        (df['Checker'].isin(checker_f)) & 
-        (df['Polisher'].isin(polisher_f))
-    ].copy()
+    filtered_df = df.copy()
+    if checker_filter:
+        filtered_df = filtered_df[filtered_df['Checker Name'].isin(checker_filter)]
+    if polisher_filter:
+        filtered_df = filtered_df[filtered_df['Polisher Name'].isin(polisher_filter)]
 
-    if not df_selection.empty:
-        # KPI METRICS
-        total_prod = df_selection['Production'].sum()
-        total_rej = df_selection['Rejected'].sum()
-        total_rew = df_selection['Rework'].sum()
-        avg_rej_percent = (total_rej / total_prod * 100) if total_prod > 0 else 0
+    # --- METRICS SECTION ---
+    total_prod = filtered_df['QTY Checked'].sum()
+    total_rej = filtered_df['Rejected Qty'].sum()
+    total_rew = filtered_df['Rework Qty'].sum()
+    rej_percent = (total_rej / total_prod * 100) if total_prod > 0 else 0
 
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Production", f"{int(total_prod):,}")
-        m2.metric("Total Rejection", f"{int(total_rej):,}")
-        m3.metric("Total Rework", f"{int(total_rew):,}")
-        m4.metric("Avg Rejection %", f"{avg_rej_percent:.2f}%")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Production", f"{total_prod:,.0f}")
+    col2.metric("Total Rejection", f"{total_rej:,.0f}")
+    col3.metric("Total Rework", f"{total_rew:,.0f}")
+    col4.metric("Avg Rejection %", f"{rej_percent:.2f}%")
 
-        # DATA TABLE
-        st.markdown("---")
-        st.subheader("📑 Quality Data Table")
-        df_display = df_selection.copy()
-        df_display['Rejection %'] = (df_display['Rejected'] / df_display['Production'] * 100).fillna(0).round(2)
-        
-        def color_rejection(val):
-            if val == 0: return 'background-color: #BBDEFB'
-            elif val < 2.0: return 'background-color: #C8E6C9'
-            else: return 'background-color: #FFCDD2'
+    st.markdown("---")
 
-        st.dataframe(df_display.style.applymap(color_rejection, subset=['Rejection %']), use_container_width=True)
+    # --- DATA TABLE ---
+    st.subheader("📝 Quality Data Table")
+    st.dataframe(filtered_df, use_container_width=True)
 
-        # DOWNLOAD BUTTON
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-            df_display.to_excel(writer, index=False)
-        st.download_button(label="📥 Download Excel Report", data=buf.getvalue(), file_name="Sadani_Report.xlsx")
-    else:
-        st.warning("⚠️ No data for selected filters.")
+    # --- EXCEL DOWNLOAD ---
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+        filtered_df.to_excel(writer, index=False, sheet_name='Report')
+    
+    st.download_button(
+        label="📥 Download Excel Report",
+        data=buf.getvalue(),
+        file_name=f"Sadani_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-# Auto-refresh every 60s
-time.sleep(60)
-st.rerun()
+except Exception as e:
+    st.error(f"Dashboard is updating. Please wait 1 minute. Error: {e}")
