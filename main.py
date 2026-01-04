@@ -25,7 +25,7 @@ st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsa
 @st.cache_data(ttl=60) # Updates every 60 seconds
 def load_data():
     # --- PASTE YOUR LINK BELOW ---
-    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pubhtml"
+    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
     
     try:
         # 2. Data Loading from Google Sheets
