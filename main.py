@@ -28,7 +28,7 @@ def load_data():
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pubhtml"
     
     try:
-        df = pd.read_csv(google_sheet_url)
+        df = pd.read_csv(google_sheet_url, on_bad_lines='skip', sep=None, engine='python')
         # Clean column names
         df.columns = df.columns.str.strip()
         df['Date'] = pd.to_datetime(df['Date'])
