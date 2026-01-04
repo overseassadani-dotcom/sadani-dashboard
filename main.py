@@ -32,13 +32,13 @@ with header_container:
 
 st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# 2. Data Loading (Connected to Live Google Sheets)
+# 2. Data Loading (Live Connection)
 @st.cache_data(ttl=60) 
 def load_data():
     try:
         sheet_url = "https://docs.google.com/spreadsheets/d/1X15uV-k6UuSlo3D_46O9j1D0H6lR_0D_p9uD9l4qD98/pub?output=csv"
         df = pd.read_csv(sheet_url)
-        df = df.iloc[:, :7] # Clean Row 65 data crash
+        df = df.iloc[:, :7] # This line stops the Row 65 data error
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY Checked', 'Rejected Qty', 'Rework Qty']
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         df = df.dropna(subset=['Date'])
@@ -55,8 +55,8 @@ if df is not None:
     # 3. Sidebar Filters
     with st.sidebar:
         st.header("🔍 Filters")
-        checker_f = st.multiselect("Checker:", options=sorted(df['Checker Name'].unique()), default=df['Checker Name'].unique())
-        polisher_f = st.multiselect("Polisher:", options=sorted(df['Polisher Name'].unique()), default=df['Polisher Name'].unique())
+        checker_f = st.multiselect("Select Checker:", options=sorted(df['Checker Name'].unique()), default=df['Checker Name'].unique())
+        polisher_f = st.multiselect("Select Polisher:", options=sorted(df['Polisher Name'].unique()), default=df['Polisher Name'].unique())
 
     df_selection = df[(df['Checker Name'].isin(checker_f)) & (df['Polisher Name'].isin(polisher_f))].copy()
 
@@ -81,7 +81,7 @@ if df is not None:
         fig = px.line(trend_data, x='Date', y='Rej%', title="Daily Rejection Trend", markers=True)
         st.plotly_chart(fig, use_container_width=True)
 
-        # 6. Master Table with Color Logic
+        # 6. Quality Data Table with Color Logic
         st.markdown("---")
         st.subheader("📑 Full Quality Data")
         df_selection['Rej%'] = (df_selection['Rejected Qty'] / df_selection['QTY Checked'] * 100).round(2)
@@ -92,9 +92,14 @@ if df is not None:
 
         st.dataframe(df_selection.style.applymap(color_rej, subset=['Rej%']), use_container_width=True)
 
-        # 7. Simplified CSV Download (Prevents the red error box)
-        csv = df_selection.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Report (CSV)", data=csv, file_name="Sadani_Report.csv", mime="text/csv")
+        # 7. Download Button (Uses CSV to avoid the Excel tool error)
+        csv_data = df_selection.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Data Report",
+            data=csv_data,
+            file_name="Sadani_Overseas_Report.csv",
+            mime="text/csv"
+        )
 
     else:
         st.warning("No data matches filters.")
