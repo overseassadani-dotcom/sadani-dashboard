@@ -28,23 +28,17 @@ def load_data():
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
     
     try:
-        # Load data and skip bad lines (like the Row 65 error)
+        # Step 1: Read the CSV link (the link you already updated correctly)
         df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
         
-        # FIX: Only take the first 7 columns to ignore "ghost" data
+        # Step 2: Fix the 'Saw 10 fields' error by strictly taking only the first 7 columns
         df = df.iloc[:, :7] 
         
-        # Rename columns to match your dashboard
+        # Step 3: Rename columns so the charts can find the right data
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
         
-        # Remove empty rows
-        df = df.dropna(subset=['Date']) 
-        
-        # Convert data types and clean text
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Checker'] = df['Checker Name'].astype(str).str.strip()
-        df['Polisher'] = df['Polisher Name'].astype(str).str.strip()
-        df['Part'] = df['Item Name'].astype(str).str.strip()
+        # Step 4: Remove any empty rows that might be at the bottom of the sheet
+        df = df.dropna(subset=['Date'])
         
         # Convert numbers
         df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
