@@ -28,7 +28,36 @@ def load_data():
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pubhtml"
     
     try:
-        df = pd.read_csv(google_sheet_url, on_bad_lines='skip', sep=None, engine='python')
+        # 2. Data Loading from Google Sheets
+@st.cache_data(ttl=60)
+def load_data():
+    google_sheet_url = "PASTE_YOUR_LINK_HERE" # Keep your actual link here
+    try:
+        # This new line is much stronger against formatting errors
+        df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
+        
+        # Clean column names
+        df.columns = df.columns.str.strip()
+        
+        # Ensure we only use the first 7 necessary columns to avoid "ghost" data
+        df = df.iloc[:, :7] 
+        
+        # Rename columns to match your dashboard exactly
+        df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
+        
+        # Convert data types
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df = df.dropna(subset=['Date']) # Remove empty rows
+        df['Checker'] = df['Checker Name'].astype(str)
+        df['Polisher'] = df['Polisher Name'].astype(str)
+        df['Part'] = df['Item Name'].astype(str)
+        df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
+        df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
+        df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
+        return df
+    except Exception as e:
+        st.error(f"Waiting for clean data... {e}")
+        return None
         # Clean column names
         df.columns = df.columns.str.strip()
         df['Date'] = pd.to_datetime(df['Date'])
