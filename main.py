@@ -15,7 +15,7 @@ with header_container:
     col_logo, col_title, col_time = st.columns([1, 4, 1])
     
     with col_logo:
-        # Check for local logo or display text
+        # Check for local logo or display text header
         if os.path.exists("logo.png"):
             st.image("logo.png", width=150)
         else:
@@ -39,26 +39,26 @@ with header_container:
 
 st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# 2. Data Loading (Connected to Google Sheets)
+# 2. Data Loading (Connected to Live Google Sheets)
 @st.cache_data(ttl=60) 
 def load_data():
     try:
-        # LINK TO YOUR GOOGLE SHEET CSV
+        # Direct link to your Google Sheets CSV
         sheet_url = "https://docs.google.com/spreadsheets/d/1X15uV-k6UuSlo3D_46O9j1D0H6lR_0D_p9uD9l4qD98/pub?output=csv"
         df = pd.read_csv(sheet_url)
         
-        # CLEANING: Fix columns to avoid the 'Line 65' error
+        # Clean data to prevent the Row 65 error
         df = df.iloc[:, :7]
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY Checked', 'Rejected Qty', 'Rework Qty']
         
-        # PREPARATION: Format for Dashboard Logic
+        # Format columns for dashboard logic
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         df = df.dropna(subset=['Date'])
         df['Checker'] = df['Checker Name'].astype(str)
         df['Polisher'] = df['Polisher Name'].astype(str)
         df['Part'] = df['Item Name'].astype(str)
         
-        # Convert numeric columns safely
+        # Ensure numbers are treated as numbers
         for col in ['QTY Checked', 'Rejected Qty', 'Rework Qty']:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
@@ -75,11 +75,11 @@ if df is not None:
         st.header("🔍 Filters")
         start_date = st.date_input("Start Date", value=df['Date'].min().date())
         end_date = st.date_input("End Date", value=df['Date'].max().date())
-        checker_f = st.multiselect("Checker:", options=sorted(df['Checker'].unique()), default=df['Checker'].unique())
-        polisher_f = st.multiselect("Polisher:", options=sorted(df['Polisher'].unique()), default=df['Polisher'].unique())
-        part_f = st.multiselect("Part Name:", options=sorted(df['Part'].unique()), default=df['Part'].unique())
+        checker_f = st.multiselect("Select Checker:", options=sorted(df['Checker'].unique()), default=df['Checker'].unique())
+        polisher_f = st.multiselect("Select Polisher:", options=sorted(df['Polisher'].unique()), default=df['Polisher'].unique())
+        part_f = st.multiselect("Select Part Name:", options=sorted(df['Part'].unique()), default=df['Part'].unique())
 
-    # Apply Filters
+    # Apply Filters to the Data
     df_selection = df[
         (df['Date'].dt.date >= start_date) & 
         (df['Date'].dt.date <= end_date) & 
@@ -89,7 +89,7 @@ if df is not None:
     ].copy()
 
     if not df_selection.empty:
-        # 4. KPI METRICS
+        # 4. KPI Metrics (Colored Boxes)
         total_prod = df_selection['QTY Checked'].sum()
         total_rej = df_selection['Rejected Qty'].sum()
         total_rew = df_selection['Rework Qty'].sum()
@@ -107,7 +107,7 @@ if df is not None:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 5. Top 3 Summary
+        # 5. Performance Highlights (Top 3)
         st.markdown("### 🏆 Performance Highlights")
         s1, s2 = st.columns(2)
         with s1:
@@ -121,7 +121,7 @@ if df is not None:
             st.error("⚠️ **Top 3 Parts (High Rejection)**")
             st.table(worst_part.sort_values('Rej%', ascending=False).head(3)[['Rej%']])
 
-        # 6. Trend Analysis
+        # 6. Trend Analysis Graph
         st.markdown("---")
         st.subheader("📈 Monthly Quality Trend")
         df_trend = df.copy()
@@ -133,7 +133,7 @@ if df is not None:
         fig_trend.update_traces(textposition="top center")
         st.plotly_chart(fig_trend, use_container_width=True)
 
-        # 7. BAR GRAPHS
+        # 7. Quality Performance Graphs
         st.markdown("---")
         color_map = {"QTY Checked": "#2E7D32", "Rejected Qty": "#D32F2F", "Rework Qty": "#FBC02D"}
 
@@ -150,26 +150,26 @@ if df is not None:
             with st.expander(f"📊 View {title} Table"):
                 st.table(summary.style.background_gradient(subset=['Rej%'], cmap='Reds'))
 
-        display_graph_with_data(df_selection, "Polisher", "Polisher Performance")
+        display_graph_with_data(df_selection, "Polisher", "Polisher Quality Performance")
         display_graph_with_data(df_selection, "Part", "Part-wise Quality Analysis")
 
-        # 8. MASTER DATA TABLE WITH COLORS
+        # 8. Color-Coded Master Table
         st.markdown("---")
-        st.subheader("📑 Full Master Data Table")
+        st.subheader("📑 Full Quality Data Table")
         
         df_display = df_selection.copy()
         df_display['Rej%'] = (df_display['Rejected Qty'] / df_display['QTY Checked'] * 100).fillna(0).round(2)
         
-        # COLOR LOGIC
+        # Color Logic: Blue (0%), Green (<2%), Yellow (2-5%), Red (>5%)
         def style_master_table(val):
-            if val == 0: return 'background-color: #BBDEFB; color: black' # Blue
-            elif val < 2.0: return 'background-color: #C8E6C9; color: black' # Green
-            elif val < 5.0: return 'background-color: #FFF9C4; color: black' # Yellow
-            else: return 'background-color: #FFCDD2; color: #990000' # Red
+            if val == 0: return 'background-color: #BBDEFB; color: black; font-weight: bold' 
+            elif val < 2.0: return 'background-color: #C8E6C9; color: black; font-weight: bold' 
+            elif val < 5.0: return 'background-color: #FFF9C4; color: black; font-weight: bold' 
+            else: return 'background-color: #FFCDD2; color: #990000; font-weight: bold' 
 
         st.dataframe(df_display.style.applymap(style_master_table, subset=['Rej%']), use_container_width=True)
 
-        # 9. EXCEL DOWNLOAD
+        # 9. Excel Download Button
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
             df_display.to_excel(writer, index=False, sheet_name='MasterReport')
@@ -177,13 +177,13 @@ if df is not None:
         st.download_button(
             label="📥 Download Full Report (Excel)",
             data=buf.getvalue(),
-            file_name=f"Sadani_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            file_name=f"Sadani_Quality_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.ms-excel"
         )
 
     else:
-        st.warning("⚠️ No data matches your filters.")
+        st.warning("⚠️ No data matches your selected filters.")
 
-# 10. Auto-Refresh Logic (Every 60 Seconds)
+# 10. Auto-Refresh (Updates every 60 seconds)
 time.sleep(60)
 st.rerun()
