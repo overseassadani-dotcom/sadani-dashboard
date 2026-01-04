@@ -33,18 +33,17 @@ def load_data():
 def load_data():
     google_sheet_url = "PASTE_YOUR_LINK_HERE" # Keep your actual link here
     try:
-        # This new line is much stronger against formatting errors
+        # Step 1: Read the CSV link
         df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
-        df = df.iloc[:, :7]
-        # Clean column names
-        df.columns = df.columns.str.strip()
         
-        # Ensure we only use the first 7 necessary columns to avoid "ghost" data
+        # Step 2: Fix the Row 65 error by only taking the first 7 columns
         df = df.iloc[:, :7] 
         
-        # Rename columns to match your dashboard exactly
+        # Step 3: Name the columns correctly
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
         
+        # Step 4: Remove empty rows so they don't crash the charts
+        df = df.dropna(subset=['Date'])
         # Convert data types
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         df = df.dropna(subset=['Date']) # Remove empty rows
