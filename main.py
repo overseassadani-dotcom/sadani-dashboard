@@ -22,53 +22,38 @@ st.markdown("""
 st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 # 2. Data Loading from Google Sheets
-@st.cache_data(ttl=60) # Updates every 60 seconds
+@st.cache_data(ttl=60)
 def load_data():
-    # --- PASTE YOUR LINK BELOW ---
+    # Corrected CSV Link
     google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
     
     try:
-        # 2. Data Loading from Google Sheets
-@st.cache_data(ttl=60)
-def load_data():
-    google_sheet_url = "PASTE_YOUR_LINK_HERE" # Keep your actual link here
-    try:
-        # Step 1: Read the CSV link
+        # Load data and skip bad lines (like the Row 65 error)
         df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
         
-        # Step 2: Fix the Row 65 error by only taking the first 7 columns
+        # FIX: Only take the first 7 columns to ignore "ghost" data
         df = df.iloc[:, :7] 
         
-        # Step 3: Name the columns correctly
+        # Rename columns to match your dashboard
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
         
-        # Step 4: Remove empty rows so they don't crash the charts
-        df = df.dropna(subset=['Date'])
-        # Convert data types
+        # Remove empty rows
+        df = df.dropna(subset=['Date']) 
+        
+        # Convert data types and clean text
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df = df.dropna(subset=['Date']) # Remove empty rows
-        df['Checker'] = df['Checker Name'].astype(str)
-        df['Polisher'] = df['Polisher Name'].astype(str)
-        df['Part'] = df['Item Name'].astype(str)
+        df['Checker'] = df['Checker Name'].astype(str).str.strip()
+        df['Polisher'] = df['Polisher Name'].astype(str).str.strip()
+        df['Part'] = df['Item Name'].astype(str).str.strip()
+        
+        # Convert numbers
         df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
         df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
         df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
+        
         return df
     except Exception as e:
-        st.error(f"Waiting for clean data... {e}")
-        return None
-        # Clean column names
-        df.columns = df.columns.str.strip()
-        df['Date'] = pd.to_datetime(df['Date'])
-        df['Checker'] = df['Checker Name'].astype(str)
-        df['Polisher'] = df['Polisher Name'].astype(str)
-        df['Part'] = df['Item Name'].astype(str)
-        df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
-        df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
-        df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
-        return df
-    except Exception as e:
-        st.error(f"Error loading data: {e}. Check if your Google Sheet is 'Published to Web' as CSV.")
+        st.error(f"Waiting for data to clean... {e}")
         return None
 
 df = load_data()
@@ -108,29 +93,26 @@ if df is not None:
         with m4:
             st.markdown(f"<div style='text-align:center; background-color:#F3E5F5; padding:15px; border-radius:10px; border-left: 5px solid #7B1FA2;'><p style='color:#7B1FA2; font-size:16px; margin:0;'>Avg Rejection %</p><h2 style='color:#4A148C; margin:0;'>{avg_rej_percent:.2f}%</h2></div>", unsafe_allow_html=True)
 
-        # Master Table with Color Logic
         st.markdown("---")
         st.subheader("📑 Full Master Data Table")
         df_display = df_selection.copy()
         df_display['Rejection %'] = (df_display['Rejected'] / df_display['Production'] * 100).fillna(0).round(2)
         
         def style_master_table(val):
-            if val == 0: return 'background-color: #BBDEFB; color: black;' # Blue
-            elif val < 2.0: return 'background-color: #C8E6C9; color: black;' # Green
-            elif val < 5.0: return 'background-color: #FFF9C4; color: black;' # Yellow
-            else: return 'background-color: #FFCDD2; color: #990000;' # Red
+            if val == 0: return 'background-color: #BBDEFB; color: black;' 
+            elif val < 2.0: return 'background-color: #C8E6C9; color: black;' 
+            elif val < 5.0: return 'background-color: #FFF9C4; color: black;' 
+            else: return 'background-color: #FFCDD2; color: #990000;' 
 
         st.dataframe(df_display.style.applymap(style_master_table, subset=['Rejection %']), use_container_width=True)
 
-        # Download Report Button
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
             df_display.to_excel(writer, index=False)
         st.download_button(label="📥 Download Excel Report", data=buf.getvalue(), file_name="Sadani_Quality_Report.xlsx", mime="application/vnd.ms-excel")
-
     else:
         st.warning("⚠️ No data matches your filters.")
 
-# Auto-refresh logic (checks for Google Sheet updates every 60s)
+# Refresh page every 60s
 time.sleep(60)
 st.rerun()
