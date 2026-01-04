@@ -21,32 +21,31 @@ st.markdown("""
     """, unsafe_allow_html=True)
 st.markdown("<hr style='border: 1px solid #E8F5E9; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
-# 2. Data Loading Function
+# 2. Data Loading from Google Sheets
 @st.cache_data(ttl=60)
 def load_data():
-    # This is the correct CSV link format
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
+    # This is your correct link with the CSV instruction at the end
+    google_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR849g1kFi3pJDRDIOHmaubGJEebfCEPyMj3cPQbPn6LFRGWKrZFBWzUNj20yXwB-iJvIbWRd6ox8aW/pub?output=csv"
     
     try:
-        # Step 1: Load the data while skipping problematic rows like Line 65
-        df = pd.read_csv(url, on_bad_lines='skip', engine='python', sep=None)
+        # Step A: Load data and skip bad rows like Line 65
+        df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
         
-        # Step 2: STRICTLY keep only the first 7 columns to stop the "Saw 10 fields" error
+        # Step B: STRICTLY take only the first 7 columns to stop the "Saw 10" error
         df = df.iloc[:, :7] 
         
-        # Step 3: Name the columns exactly like your spreadsheet headers
+        # Step C: Give columns their correct names
         df.columns = ['Date', 'Checker Name', 'Polisher Name', 'Item Name', 'QTY / PCS Checked', 'Rejected Qty/Pcs', 'Rework Qty/PCS']
         
-        # Step 4: Remove empty rows
-        df = df.dropna(subset=['Date']) 
+        # Step D: Remove empty rows
+        df = df.dropna(subset=['Date'])
         
-        # Step 5: Clean the data for the charts
+        # Step E: Clean up numbers and dates
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         df['Checker'] = df['Checker Name'].astype(str).str.strip()
         df['Polisher'] = df['Polisher Name'].astype(str).str.strip()
         df['Part'] = df['Item Name'].astype(str).str.strip()
         
-        # Convert numbers and fill missing spots with 0
         df['Production'] = pd.to_numeric(df['QTY / PCS Checked'], errors='coerce').fillna(0)
         df['Rejected'] = pd.to_numeric(df['Rejected Qty/Pcs'], errors='coerce').fillna(0)
         df['Rework'] = pd.to_numeric(df['Rework Qty/PCS'], errors='coerce').fillna(0)
@@ -56,11 +55,11 @@ def load_data():
         st.error(f"Waiting for clean data... {e}")
         return None
 
-# Run the data loader
+# Load the data
 df = load_data()
 
 if df is not None:
-    # --- SIDEBAR FILTERS ---
+    # --- FILTERS ---
     with st.sidebar:
         st.header("🔍 Filters")
         start_date = st.date_input("Start Date", value=df['Date'].min().date())
@@ -68,7 +67,6 @@ if df is not None:
         checker_f = st.multiselect("Checker:", options=sorted(df['Checker'].unique()), default=df['Checker'].unique())
         polisher_f = st.multiselect("Polisher:", options=sorted(df['Polisher'].unique()), default=df['Polisher'].unique())
 
-    # Apply filters
     df_selection = df[
         (df['Date'].dt.date >= start_date) & 
         (df['Date'].dt.date <= end_date) & 
@@ -77,38 +75,39 @@ if df is not None:
     ].copy()
 
     if not df_selection.empty:
-        # KPI CALCULATIONS
+        # KPI METRICS
         total_prod = df_selection['Production'].sum()
         total_rej = df_selection['Rejected'].sum()
         total_rew = df_selection['Rework'].sum()
-        rej_percent = (total_rej / total_prod * 100) if total_prod > 0 else 0
+        avg_rej_percent = (total_rej / total_prod * 100) if total_prod > 0 else 0
 
-        # Display Metrics
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Production", f"{int(total_prod):,}")
-        c2.metric("Total Rejected", f"{int(total_rej):,}")
-        c3.metric("Total Rework", f"{int(total_rew):,}")
-        c4.metric("Rejection %", f"{rej_percent:.2f}%")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Production", f"{int(total_prod):,}")
+        m2.metric("Total Rejection", f"{int(total_rej):,}")
+        m3.metric("Total Rework", f"{int(total_rew):,}")
+        m4.metric("Avg Rejection %", f"{avg_rej_percent:.2f}%")
 
-        # Master Table with Coloring
+        # DATA TABLE
         st.markdown("---")
         st.subheader("📑 Quality Data Table")
         df_display = df_selection.copy()
         df_display['Rejection %'] = (df_display['Rejected'] / df_display['Production'] * 100).fillna(0).round(2)
         
-        def color_logic(val):
-            if val == 0: return 'background-color: #BBDEFB' # Blue
-            elif val < 2.0: return 'background-color: #C8E6C9' # Green
-            else: return 'background-color: #FFCDD2' # Red
+        def color_rejection(val):
+            if val == 0: return 'background-color: #BBDEFB'
+            elif val < 2.0: return 'background-color: #C8E6C9'
+            else: return 'background-color: #FFCDD2'
 
-        st.dataframe(df_display.style.applymap(color_logic, subset=['Rejection %']), use_container_width=True)
+        st.dataframe(df_display.style.applymap(color_rejection, subset=['Rejection %']), use_container_width=True)
 
-        # Download Button
+        # DOWNLOAD BUTTON
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
             df_display.to_excel(writer, index=False)
-        st.download_button("📥 Download Excel Report", data=buf.getvalue(), file_name="Quality_Report.xlsx")
+        st.download_button(label="📥 Download Excel Report", data=buf.getvalue(), file_name="Sadani_Report.xlsx")
+    else:
+        st.warning("⚠️ No data for selected filters.")
 
-# Auto-refresh logic
+# Auto-refresh every 60s
 time.sleep(60)
 st.rerun()
