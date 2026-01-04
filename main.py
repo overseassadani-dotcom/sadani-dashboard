@@ -35,7 +35,7 @@ def load_data():
     try:
         # This new line is much stronger against formatting errors
         df = pd.read_csv(google_sheet_url, on_bad_lines='skip', engine='python', sep=None)
-        
+        df = df.iloc[:, :7]
         # Clean column names
         df.columns = df.columns.str.strip()
         
